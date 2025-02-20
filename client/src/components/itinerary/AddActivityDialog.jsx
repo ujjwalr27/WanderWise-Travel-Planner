@@ -12,25 +12,27 @@ import {
   MenuItem,
   Box,
   CircularProgress,
-  Alert
+  Alert,
+  Typography
 } from '@mui/material';
-import { LoadScript, Autocomplete } from '@react-google-maps/api';
+import { LoadScript, StandaloneSearchBox } from '@react-google-maps/api';
 import { TimePicker } from '@mui/x-date-pickers/TimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { format, parse } from 'date-fns';
+import { useItinerary } from '../../hooks/useItinerary';
 
 const libraries = ['places'];
 
 const activityTypes = [
-  'cultural',
-  'local',
-  'relaxation',
-  'transport',
-  'dining',
-  'shopping',
-  'entertainment',
-  'sightseeing'
+  { value: 'cultural', label: 'Cultural' },
+  { value: 'local', label: 'Local Experience' },
+  { value: 'relaxation', label: 'Relaxation' },
+  { value: 'transport', label: 'Transportation' },
+  { value: 'dining', label: 'Food & Dining' },
+  { value: 'shopping', label: 'Shopping' },
+  { value: 'entertainment', label: 'Entertainment' },
+  { value: 'sightseeing', label: 'Sightseeing' }
 ];
 
 const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
@@ -52,9 +54,12 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
     },
     notes: ''
   });
+  const [searchBox, setSearchBox] = useState(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [autocomplete, setAutocomplete] = useState(null);
+
+  const { useAddActivity } = useItinerary();
+  const addActivityMutation = useAddActivity();
 
   const handleChange = (field) => (event) => {
     setFormData(prev => ({
@@ -70,28 +75,40 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
     }));
   };
 
-  const handlePlaceSelect = () => {
-    if (autocomplete) {
-      const place = autocomplete.getPlace();
-      if (place.geometry) {
-        setFormData(prev => ({
-          ...prev,
-          location: {
-            name: place.name || '',
-            address: place.formatted_address || '',
-            coordinates: [
-              place.geometry.location.lng(),
-              place.geometry.location.lat()
-            ],
-            placeId: place.place_id
-          }
-        }));
-      }
-    }
+  const onSearchBoxLoad = (ref) => {
+    setSearchBox(ref);
   };
 
-  const onLoad = (autocompleteInstance) => {
-    setAutocomplete(autocompleteInstance);
+  const handlePlacesChanged = () => {
+    if (searchBox) {
+      const places = searchBox.getPlaces();
+      
+      if (places.length === 0) {
+        setError('Please select a valid location from the suggestions');
+        return;
+      }
+
+      const place = places[0];
+      if (!place.geometry) {
+        setError('Selected place has no location data');
+        return;
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        title: place.name,
+        location: {
+          name: place.name,
+          address: place.formatted_address,
+          coordinates: [
+            place.geometry.location.lng(),
+            place.geometry.location.lat()
+          ],
+          placeId: place.place_id
+        }
+      }));
+      setError('');
+    }
   };
 
   const handleSubmit = async () => {
@@ -109,22 +126,15 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
         throw new Error('Please select a valid location from the suggestions');
       }
 
-      const response = await fetch(`/api/itineraries/${itineraryId}/activities`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
+      await addActivityMutation.mutateAsync({
+        id: itineraryId,
+        data: formData
       });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to add activity');
-      }
 
       onClose();
     } catch (error) {
-      setError(error.message);
+      console.error('Failed to add activity:', error);
+      setError(error.message || 'Failed to add activity');
     } finally {
       setIsLoading(false);
     }
@@ -150,12 +160,43 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
               required
             >
               {activityTypes.map(type => (
-                <MenuItem key={type} value={type} sx={{ textTransform: 'capitalize' }}>
-                  {type}
+                <MenuItem key={type.value} value={type.value}>
+                  {type.label}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
+
+          <LoadScript
+            googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
+            libraries={libraries}
+          >
+            <StandaloneSearchBox
+              onLoad={onSearchBoxLoad}
+              onPlacesChanged={handlePlacesChanged}
+            >
+              <TextField
+                fullWidth
+                label="Search Location"
+                placeholder="Type to search for a place..."
+                required
+              />
+            </StandaloneSearchBox>
+          </LoadScript>
+
+          {formData.location.name && (
+            <Box sx={{ mt: 1 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                Selected Location
+              </Typography>
+              <Typography variant="body2">
+                {formData.location.name}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {formData.location.address}
+              </Typography>
+            </Box>
+          )}
 
           <TextField
             fullWidth
@@ -164,28 +205,6 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
             onChange={handleChange('title')}
             required
           />
-
-          <LoadScript
-            googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
-            libraries={libraries}
-          >
-            <Autocomplete
-              onLoad={onLoad}
-              onPlaceChanged={handlePlaceSelect}
-            >
-              <TextField
-                fullWidth
-                label="Location"
-                value={formData.location.name}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  location: { ...prev.location, name: e.target.value }
-                }))}
-                required
-                placeholder="Search for a location"
-              />
-            </Autocomplete>
-          </LoadScript>
 
           <LocalizationProvider dateAdapter={AdapterDateFns}>
             <Box sx={{ display: 'flex', gap: 2 }}>
