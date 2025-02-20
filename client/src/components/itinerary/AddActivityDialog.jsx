@@ -6,330 +6,277 @@ import {
   DialogActions,
   TextField,
   Button,
-  Grid,
+  FormControl,
+  InputLabel,
+  Select,
   MenuItem,
   Box,
-  Typography,
-  Alert,
-  Autocomplete,
   CircularProgress,
-  InputAdornment
+  Alert
 } from '@mui/material';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+import { LoadScript, Autocomplete } from '@react-google-maps/api';
+import { TimePicker } from '@mui/x-date-pickers/TimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { useItinerary } from '../../hooks/useItinerary';
-import { formatCurrency } from '../../utils/currencyUtils';
+import { format, parse } from 'date-fns';
+
+const libraries = ['places'];
 
 const activityTypes = [
-  'Sightseeing',
-  'Food & Dining',
-  'Cultural',
-  'Adventure',
-  'Shopping',
-  'Entertainment',
-  'Transportation',
-  'Accommodation',
-  'Relaxation'
+  'cultural',
+  'local',
+  'relaxation',
+  'transport',
+  'dining',
+  'shopping',
+  'entertainment',
+  'sightseeing'
 ];
 
 const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
   const [formData, setFormData] = useState({
     type: '',
     title: '',
+    description: '',
     startTime: null,
     endTime: null,
-    location: null,
-    description: '',
+    location: {
+      name: '',
+      address: '',
+      coordinates: [0, 0],
+      placeId: ''
+    },
     cost: {
-      amount: '',
+      amount: 0,
       currency: 'USD'
     },
-    notes: '',
-    bookingInfo: {
-      provider: '',
-      confirmationNumber: ''
-    }
+    notes: ''
   });
-  const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState('');
-
-  const { useAddActivity, useNearbySearch } = useItinerary();
-  const addActivityMutation = useAddActivity();
-
-  const { data: nearbyPlaces, isLoading: isLoadingPlaces } = useNearbySearch({
-    query: searchQuery,
-    latitude: formData.location?.coordinates[1],
-    longitude: formData.location?.coordinates[0]
-  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [autocomplete, setAutocomplete] = useState(null);
 
   const handleChange = (field) => (event) => {
-    setFormData((prev) => ({
+    setFormData(prev => ({
       ...prev,
       [field]: event.target.value
     }));
   };
 
-  const handleCostChange = (field) => (event) => {
-    setFormData((prev) => ({
+  const handleTimeChange = (field) => (time) => {
+    setFormData(prev => ({
       ...prev,
-      cost: {
-        ...prev.cost,
-        [field]: event.target.value
-      }
+      [field]: time ? format(time, 'HH:mm') : null
     }));
   };
 
-  const handleBookingChange = (field) => (event) => {
-    setFormData((prev) => ({
-      ...prev,
-      bookingInfo: {
-        ...prev.bookingInfo,
-        [field]: event.target.value
+  const handlePlaceSelect = () => {
+    if (autocomplete) {
+      const place = autocomplete.getPlace();
+      if (place.geometry) {
+        setFormData(prev => ({
+          ...prev,
+          location: {
+            name: place.name || '',
+            address: place.formatted_address || '',
+            coordinates: [
+              place.geometry.location.lng(),
+              place.geometry.location.lat()
+            ],
+            placeId: place.place_id
+          }
+        }));
       }
-    }));
+    }
+  };
+
+  const onLoad = (autocompleteInstance) => {
+    setAutocomplete(autocompleteInstance);
   };
 
   const handleSubmit = async () => {
-    if (!formData.title || !formData.type || !formData.startTime || !formData.endTime || !formData.location) {
-      setError('Please fill in all required fields');
-      return;
-    }
-
     try {
-      await addActivityMutation.mutateAsync({
-        id: itineraryId,
-        data: formData
-      });
-      handleClose();
-    } catch (error) {
-      setError(error.response?.data?.message || 'Failed to add activity');
-    }
-  };
+      setIsLoading(true);
+      setError('');
 
-  const handleClose = () => {
-    setFormData({
-      type: '',
-      title: '',
-      startTime: null,
-      endTime: null,
-      location: null,
-      description: '',
-      cost: {
-        amount: '',
-        currency: 'USD'
-      },
-      notes: '',
-      bookingInfo: {
-        provider: '',
-        confirmationNumber: ''
+      // Validate required fields
+      if (!formData.type || !formData.title || !formData.startTime || !formData.endTime) {
+        throw new Error('Please fill in all required fields');
       }
-    });
-    setError('');
-    onClose();
+
+      // Validate location
+      if (!formData.location.name || !formData.location.coordinates[0] || !formData.location.coordinates[1]) {
+        throw new Error('Please select a valid location from the suggestions');
+      }
+
+      const response = await fetch(`/api/itineraries/${itineraryId}/activities`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to add activity');
+      }
+
+      onClose();
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDateFns}>
-      <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-        <DialogTitle>Add Activity</DialogTitle>
-        <DialogContent>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Add Activity</DialogTitle>
+      <DialogContent>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
 
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                select
-                fullWidth
-                label="Activity Type"
-                value={formData.type}
-                onChange={handleChange('type')}
-                required
-              >
-                {activityTypes.map((type) => (
-                  <MenuItem key={type} value={type}>
-                    {type}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Title"
-                value={formData.title}
-                onChange={handleChange('title')}
-                required
-              />
-            </Grid>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+          <FormControl fullWidth>
+            <InputLabel>Activity Type</InputLabel>
+            <Select
+              value={formData.type}
+              onChange={handleChange('type')}
+              label="Activity Type"
+              required
+            >
+              {activityTypes.map(type => (
+                <MenuItem key={type} value={type} sx={{ textTransform: 'capitalize' }}>
+                  {type}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-            <Grid item xs={12}>
-              <Autocomplete
-                fullWidth
-                value={formData.location}
-                onChange={(_, newValue) => {
-                  setFormData((prev) => ({
-                    ...prev,
-                    location: newValue
-                  }));
-                }}
-                inputValue={searchQuery}
-                onInputChange={(_, newInputValue) => {
-                  setSearchQuery(newInputValue);
-                }}
-                options={nearbyPlaces || []}
-                getOptionLabel={(option) => option.name}
-                loading={isLoadingPlaces}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Location"
-                    required
-                    InputProps={{
-                      ...params.InputProps,
-                      endAdornment: (
-                        <>
-                          {isLoadingPlaces ? (
-                            <CircularProgress color="inherit" size={20} />
-                          ) : null}
-                          {params.InputProps.endAdornment}
-                        </>
-                      )
-                    }}
-                  />
-                )}
-              />
-            </Grid>
+          <TextField
+            fullWidth
+            label="Title"
+            value={formData.title}
+            onChange={handleChange('title')}
+            required
+          />
 
-            <Grid item xs={12} sm={6}>
-              <DateTimePicker
-                label="Start Time"
-                value={formData.startTime}
-                onChange={(newValue) => {
-                  setFormData((prev) => ({
-                    ...prev,
-                    startTime: newValue
-                  }));
-                }}
-                minDateTime={dates.startDate}
-                maxDateTime={dates.endDate}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <DateTimePicker
-                label="End Time"
-                value={formData.endTime}
-                onChange={(newValue) => {
-                  setFormData((prev) => ({
-                    ...prev,
-                    endTime: newValue
-                  }));
-                }}
-                minDateTime={formData.startTime || dates.startDate}
-                maxDateTime={dates.endDate}
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                multiline
-                rows={3}
-                label="Description"
-                value={formData.description}
-                onChange={handleChange('description')}
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" gutterBottom>
-                Cost
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={8}>
-                  <TextField
-                    fullWidth
-                    label="Amount"
-                    type="number"
-                    value={formData.cost.amount}
-                    onChange={handleCostChange('amount')}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          {formData.cost.currency}
-                        </InputAdornment>
-                      )
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={4}>
-                  <TextField
-                    select
-                    fullWidth
-                    label="Currency"
-                    value={formData.cost.currency}
-                    onChange={handleCostChange('currency')}
-                  >
-                    <MenuItem value="USD">USD</MenuItem>
-                    <MenuItem value="EUR">EUR</MenuItem>
-                    <MenuItem value="GBP">GBP</MenuItem>
-                  </TextField>
-                </Grid>
-              </Grid>
-            </Grid>
-
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                multiline
-                rows={2}
-                label="Notes"
-                value={formData.notes}
-                onChange={handleChange('notes')}
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" gutterBottom>
-                Booking Information
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Provider"
-                    value={formData.bookingInfo.provider}
-                    onChange={handleBookingChange('provider')}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Confirmation Number"
-                    value={formData.bookingInfo.confirmationNumber}
-                    onChange={handleBookingChange('confirmationNumber')}
-                  />
-                </Grid>
-              </Grid>
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose}>Cancel</Button>
-          <Button
-            onClick={handleSubmit}
-            variant="contained"
-            disabled={addActivityMutation.isLoading}
+          <LoadScript
+            googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
+            libraries={libraries}
           >
-            Add Activity
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </LocalizationProvider>
+            <Autocomplete
+              onLoad={onLoad}
+              onPlaceChanged={handlePlaceSelect}
+            >
+              <TextField
+                fullWidth
+                label="Location"
+                value={formData.location.name}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  location: { ...prev.location, name: e.target.value }
+                }))}
+                required
+                placeholder="Search for a location"
+              />
+            </Autocomplete>
+          </LoadScript>
+
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TimePicker
+                label="Start Time"
+                value={formData.startTime ? parse(formData.startTime, 'HH:mm', new Date()) : null}
+                onChange={handleTimeChange('startTime')}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    required: true
+                  }
+                }}
+              />
+              <TimePicker
+                label="End Time"
+                value={formData.endTime ? parse(formData.endTime, 'HH:mm', new Date()) : null}
+                onChange={handleTimeChange('endTime')}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    required: true
+                  }
+                }}
+              />
+            </Box>
+          </LocalizationProvider>
+
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <TextField
+              type="number"
+              label="Cost"
+              value={formData.cost.amount}
+              onChange={(e) => setFormData(prev => ({
+                ...prev,
+                cost: { ...prev.cost, amount: Number(e.target.value) }
+              }))}
+              InputProps={{ inputProps: { min: 0 } }}
+              fullWidth
+            />
+            <FormControl sx={{ minWidth: 120 }}>
+              <InputLabel>Currency</InputLabel>
+              <Select
+                value={formData.cost.currency}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  cost: { ...prev.cost, currency: e.target.value }
+                }))}
+                label="Currency"
+              >
+                <MenuItem value="USD">USD</MenuItem>
+                <MenuItem value="EUR">EUR</MenuItem>
+                <MenuItem value="GBP">GBP</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+
+          <TextField
+            fullWidth
+            label="Description"
+            value={formData.description}
+            onChange={handleChange('description')}
+            multiline
+            rows={2}
+          />
+
+          <TextField
+            fullWidth
+            label="Notes"
+            value={formData.notes}
+            onChange={handleChange('notes')}
+            multiline
+            rows={2}
+          />
+        </Box>
+      </DialogContent>
+
+      <DialogActions>
+        <Button onClick={onClose} disabled={isLoading}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleSubmit}
+          variant="contained"
+          disabled={isLoading}
+          startIcon={isLoading ? <CircularProgress size={20} /> : null}
+        >
+          Add Activity
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 
