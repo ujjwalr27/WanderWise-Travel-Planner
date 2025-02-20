@@ -3,7 +3,7 @@ const Itinerary = require('../models/itinerary.model');
 const User = require('../models/user.model');
 const { asyncHandler } = require('../middleware/validation.middleware');
 const emailService = require('../services/email.service');
-const { validateItineraryData, validateActivity } = require('../utils/validationUtils');
+const { validateItineraryData } = require('../utils/validationUtils');
 
 // Create new itinerary
 const createItinerary = asyncHandler(async (req, res) => {
@@ -127,93 +127,6 @@ const deleteItinerary = asyncHandler(async (req, res) => {
   });
 });
 
-// Add activity to itinerary
-const addActivity = asyncHandler(async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { date, activity } = req.body;
-
-    if (!date || !activity) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Date and activity details are required'
-      });
-    }
-
-    // Validate activity data
-    await validateActivity(activity);
-
-    const itinerary = await Itinerary.findOne({
-      _id: id,
-      user: req.user._id
-    });
-
-    if (!itinerary) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Itinerary not found'
-      });
-    }
-
-    // Find or create day plan for the given date
-    let dayPlan = itinerary.dayPlans.find(day => 
-      new Date(day.date).toISOString().split('T')[0] === new Date(date).toISOString().split('T')[0]
-    );
-
-    if (!dayPlan) {
-      dayPlan = {
-        date: new Date(date),
-        activities: []
-      };
-      itinerary.dayPlans.push(dayPlan);
-    }
-
-    // Add the new activity
-    dayPlan.activities.push({
-      type: activity.type,
-      title: activity.title,
-      description: activity.description || '',
-      location: {
-        name: activity.location.name,
-        address: activity.location.address,
-        coordinates: activity.location.coordinates,
-        placeId: activity.location.placeId
-      },
-      startTime: activity.startTime,
-      endTime: activity.endTime,
-      cost: {
-        amount: Number(activity.cost.amount) || 0,
-        currency: activity.cost.currency || 'USD'
-      },
-      notes: activity.notes || ''
-    });
-
-    // Sort day plans by date
-    itinerary.dayPlans.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    // Sort activities by start time
-    dayPlan.activities.sort((a, b) => {
-      const timeA = a.startTime.split(':').map(Number);
-      const timeB = b.startTime.split(':').map(Number);
-      return (timeA[0] * 60 + timeA[1]) - (timeB[0] * 60 + timeB[1]);
-    });
-
-    // Save the updated itinerary
-    await itinerary.save();
-
-    res.json({
-      status: 'success',
-      itinerary
-    });
-  } catch (error) {
-    console.error('Add activity error:', error);
-    res.status(400).json({
-      status: 'error',
-      message: error.message
-    });
-  }
-});
-
 // Share itinerary
 const shareItinerary = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -243,25 +156,11 @@ const shareItinerary = asyncHandler(async (req, res) => {
   });
 });
 
-// Search nearby places
-const searchNearbyPlaces = asyncHandler(async (req, res) => {
-  const { latitude, longitude, type, radius } = req.query;
-
-  // This would typically use Google Places API or similar
-  // Implement external API call here
-
-  res.json({
-    message: 'Search nearby places - To be implemented with external API'
-  });
-});
-
 module.exports = {
   createItinerary,
   getUserItineraries,
   getItinerary,
   updateItinerary,
   deleteItinerary,
-  addActivity,
-  shareItinerary,
-  searchNearbyPlaces
+  shareItinerary
 }; 

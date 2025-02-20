@@ -36,17 +36,6 @@ const validateItineraryData = async (data) => {
       throw new Error('Invalid travel style');
     }
 
-    // Validate day plans if present
-    if (data.dayPlans) {
-      if (!Array.isArray(data.dayPlans)) {
-        throw new Error('Day plans must be an array');
-      }
-
-      for (const dayPlan of data.dayPlans) {
-        await validateDayPlan(dayPlan);
-      }
-    }
-
     return { isValid: true, data };
   } catch (error) {
     return {
@@ -56,68 +45,6 @@ const validateItineraryData = async (data) => {
       }
     };
   }
-};
-
-const validateDayPlan = async (dayPlan) => {
-  if (!dayPlan.date) {
-    throw new Error('Day plan date is required');
-  }
-
-  if (!Array.isArray(dayPlan.activities)) {
-    throw new Error('Activities must be an array');
-  }
-
-  for (const activity of dayPlan.activities) {
-    await validateActivity(activity);
-  }
-};
-
-const validateActivity = async (activity) => {
-  // Required fields
-  if (!activity.type) throw new Error('Activity type is required');
-  if (!activity.title) throw new Error('Activity title is required');
-  if (!activity.startTime) throw new Error('Start time is required');
-  if (!activity.endTime) throw new Error('End time is required');
-
-  // Validate location
-  if (!activity.location || 
-      !activity.location.name || 
-      !activity.location.address || 
-      !activity.location.coordinates) {
-    throw new Error('Location information is incomplete');
-  }
-
-  // Validate coordinates
-  if (!Array.isArray(activity.location.coordinates) || 
-      activity.location.coordinates.length !== 2 ||
-      !isValidCoordinates(activity.location.coordinates)) {
-    throw new Error('Invalid location coordinates');
-  }
-
-  // Validate times
-  if (!isValidTimeFormat(activity.startTime)) {
-    throw new Error('Invalid start time format (HH:mm required)');
-  }
-  if (!isValidTimeFormat(activity.endTime)) {
-    throw new Error('Invalid end time format (HH:mm required)');
-  }
-  if (activity.startTime >= activity.endTime) {
-    throw new Error('End time must be after start time');
-  }
-
-  // Validate cost if present
-  if (activity.cost) {
-    if (typeof activity.cost.amount !== 'number' || activity.cost.amount < 0) {
-      throw new Error('Invalid cost amount');
-    }
-    if (!activity.cost.currency || typeof activity.cost.currency !== 'string') {
-      throw new Error('Invalid currency');
-    }
-  }
-};
-
-const isValidTimeFormat = (time) => {
-  return /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time);
 };
 
 const isValidCoordinates = (coordinates) => {
@@ -132,8 +59,5 @@ const isValidCoordinates = (coordinates) => {
 
 module.exports = {
   validateItineraryData,
-  validateDayPlan,
-  validateActivity,
-  isValidTimeFormat,
   isValidCoordinates
 }; 
