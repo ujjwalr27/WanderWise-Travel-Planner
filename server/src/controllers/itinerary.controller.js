@@ -3,22 +3,38 @@ const Itinerary = require('../models/itinerary.model');
 const User = require('../models/user.model');
 const { asyncHandler } = require('../middleware/validation.middleware');
 const emailService = require('../services/email.service');
-const { validateItineraryData } = require('../utils/validationUtils');
+const { validateItineraryData, validateActivity } = require('../utils/validationUtils');
 
 // Create new itinerary
 const createItinerary = asyncHandler(async (req, res) => {
-  const itineraryData = {
-    ...req.body,
-    user: req.user._id
-  };
+  try {
+    const validationResult = await validateItineraryData(req.body);
+    if (!validationResult.isValid) {
+      return res.status(400).json({
+        status: 'error',
+        message: validationResult.errors.message
+      });
+    }
 
-  const itinerary = new Itinerary(itineraryData);
-  await itinerary.save();
+    const itineraryData = {
+      ...validationResult.data,
+      user: req.user._id
+    };
 
-  res.status(201).json({
-    status: 'success',
-    itinerary
-  });
+    const itinerary = new Itinerary(itineraryData);
+    await itinerary.save();
+
+    res.status(201).json({
+      status: 'success',
+      itinerary
+    });
+  } catch (error) {
+    console.error('Create itinerary error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
 });
 
 // Get all user's itineraries
@@ -54,26 +70,41 @@ const getItinerary = asyncHandler(async (req, res) => {
 
 // Update itinerary
 const updateItinerary = asyncHandler(async (req, res) => {
-  const updates = req.body;
-  const itinerary = await Itinerary.findOne({
-    _id: req.params.id,
-    user: req.user._id
-  });
+  try {
+    const validationResult = await validateItineraryData(req.body);
+    if (!validationResult.isValid) {
+      return res.status(400).json({
+        status: 'error',
+        message: validationResult.errors.message
+      });
+    }
 
-  if (!itinerary) {
-    return res.status(404).json({
+    const itinerary = await Itinerary.findOne({
+      _id: req.params.id,
+      user: req.user._id
+    });
+
+    if (!itinerary) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Itinerary not found'
+      });
+    }
+
+    Object.assign(itinerary, validationResult.data);
+    await itinerary.save();
+
+    res.json({
+      status: 'success',
+      itinerary
+    });
+  } catch (error) {
+    console.error('Update itinerary error:', error);
+    res.status(500).json({
       status: 'error',
-      message: 'Itinerary not found'
+      message: error.message
     });
   }
-
-  Object.assign(itinerary, updates);
-  await itinerary.save();
-
-  res.json({
-    status: 'success',
-    itinerary
-  });
 });
 
 // Delete itinerary
@@ -98,78 +129,89 @@ const deleteItinerary = asyncHandler(async (req, res) => {
 
 // Add activity to itinerary
 const addActivity = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { date, activity } = req.body;
+  try {
+    const { id } = req.params;
+    const { date, activity } = req.body;
 
-  if (!date || !activity) {
-    return res.status(400).json({
+    if (!date || !activity) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Date and activity details are required'
+      });
+    }
+
+    // Validate activity data
+    await validateActivity(activity);
+
+    const itinerary = await Itinerary.findOne({
+      _id: id,
+      user: req.user._id
+    });
+
+    if (!itinerary) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Itinerary not found'
+      });
+    }
+
+    // Find or create day plan for the given date
+    let dayPlan = itinerary.dayPlans.find(day => 
+      new Date(day.date).toISOString().split('T')[0] === new Date(date).toISOString().split('T')[0]
+    );
+
+    if (!dayPlan) {
+      dayPlan = {
+        date: new Date(date),
+        activities: []
+      };
+      itinerary.dayPlans.push(dayPlan);
+    }
+
+    // Add the new activity
+    dayPlan.activities.push({
+      type: activity.type,
+      title: activity.title,
+      description: activity.description || '',
+      location: {
+        name: activity.location.name,
+        address: activity.location.address,
+        coordinates: activity.location.coordinates,
+        placeId: activity.location.placeId
+      },
+      startTime: activity.startTime,
+      endTime: activity.endTime,
+      cost: {
+        amount: Number(activity.cost.amount) || 0,
+        currency: activity.cost.currency || 'USD'
+      },
+      notes: activity.notes || ''
+    });
+
+    // Sort day plans by date
+    itinerary.dayPlans.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Sort activities by start time
+    dayPlan.activities.sort((a, b) => {
+      const timeA = a.startTime.split(':').map(Number);
+      const timeB = b.startTime.split(':').map(Number);
+      return (timeA[0] * 60 + timeA[1]) - (timeB[0] * 60 + timeB[1]);
+    });
+
+    // Save the updated itinerary
+    await itinerary.save();
+
+    res.json({
+      status: 'success',
+      itinerary
+    });
+  } catch (error) {
+    console.error('Add activity error:', error);
+    res.status(400).json({
       status: 'error',
-      message: 'Date and activity details are required'
+      message: error.message
     });
   }
-
-  const itinerary = await Itinerary.findOne({
-    _id: id,
-    user: req.user._id
-  });
-
-  if (!itinerary) {
-    return res.status(404).json({
-      status: 'error',
-      message: 'Itinerary not found'
-    });
-  }
-
-  // Find or create day plan for the given date
-  let dayPlan = itinerary.dayPlans.find(day => 
-    new Date(day.date).toISOString().split('T')[0] === new Date(date).toISOString().split('T')[0]
-  );
-
-  if (!dayPlan) {
-    dayPlan = {
-      date: new Date(date),
-      activities: []
-    };
-    itinerary.dayPlans.push(dayPlan);
-  }
-
-  // Add the new activity
-  dayPlan.activities.push({
-    type: activity.type,
-    title: activity.title,
-    description: activity.description || '',
-    location: {
-      name: activity.location.name,
-      address: activity.location.address,
-      coordinates: activity.location.coordinates,
-      placeId: activity.location.placeId
-    },
-    startTime: activity.startTime,
-    endTime: activity.endTime,
-    cost: {
-      amount: Number(activity.cost.amount) || 0,
-      currency: activity.cost.currency || 'USD'
-    },
-    notes: activity.notes || ''
-  });
-
-  // Sort day plans by date
-  itinerary.dayPlans.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-  // Sort activities by start time
-  dayPlan.activities.sort((a, b) => {
-    const timeA = a.startTime.split(':').map(Number);
-    const timeB = b.startTime.split(':').map(Number);
-    return (timeA[0] * 60 + timeA[1]) - (timeB[0] * 60 + timeB[1]);
-  });
-
-  // Save the updated itinerary
-  await itinerary.save();
-
-  res.json({
-    status: 'success',
-    itinerary
-  });
 });
 
 // Share itinerary
