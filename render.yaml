@@ -33,8 +33,9 @@ services:
   # Frontend static site
   - type: static
     name: wanderwise-client
-    buildCommand: cd client && npm ci && NODE_ENV=production npm run build
-    publishDir: client/dist
+    rootDir: client
+    buildCommand: npm ci && NODE_ENV=production npm run build
+    publishDir: dist
     envVars:
       - key: NODE_ENV
         value: production
