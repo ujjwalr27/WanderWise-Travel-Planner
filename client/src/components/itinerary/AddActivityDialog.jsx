@@ -13,14 +13,15 @@ import {
   Box,
   CircularProgress,
   Alert,
-  Typography
+  Grid
 } from '@mui/material';
 import { LoadScript, StandaloneSearchBox } from '@react-google-maps/api';
-import { TimePicker, DatePicker } from '@mui/x-date-pickers';
+import { TimePicker } from '@mui/x-date-pickers/TimePicker';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { format, parse, startOfDay, isWithinInterval } from 'date-fns';
 import { useItinerary } from '../../hooks/useItinerary';
+import { format, isWithinInterval } from 'date-fns';
 
 const libraries = ['places'];
 
@@ -29,7 +30,7 @@ const activityTypes = [
   { value: 'local', label: 'Local Experience' },
   { value: 'relaxation', label: 'Relaxation' },
   { value: 'transport', label: 'Transportation' },
-  { value: 'dining', label: 'Food & Dining' },
+  { value: 'dining', label: 'Dining' },
   { value: 'shopping', label: 'Shopping' },
   { value: 'entertainment', label: 'Entertainment' },
   { value: 'sightseeing', label: 'Sightseeing' }
@@ -55,10 +56,9 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
     },
     notes: ''
   });
+
   const [searchBox, setSearchBox] = useState(null);
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-
   const { useAddActivity } = useItinerary();
   const addActivityMutation = useAddActivity();
 
@@ -70,10 +70,13 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
   };
 
   const handleTimeChange = (field) => (time) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: time ? format(time, 'HH:mm') : null
-    }));
+    if (time) {
+      const timeString = format(time, 'HH:mm');
+      setFormData(prev => ({
+        ...prev,
+        [field]: timeString
+      }));
+    }
   };
 
   const onSearchBoxLoad = (ref) => {
@@ -83,9 +86,8 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
   const handlePlacesChanged = () => {
     if (searchBox) {
       const places = searchBox.getPlaces();
-      
       if (places.length === 0) {
-        setError('Please select a valid location from the suggestions');
+        setError('Please select a valid location');
         return;
       }
 
@@ -97,7 +99,7 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
 
       setFormData(prev => ({
         ...prev,
-        title: place.name,
+        title: prev.title || place.name, // Only set title if it's empty
         location: {
           name: place.name,
           address: place.formatted_address,
@@ -113,81 +115,75 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
   };
 
   const handleDateChange = (newDate) => {
-    if (newDate) {
-      // Ensure date is within itinerary dates
-      const start = new Date(dates.startDate);
-      const end = new Date(dates.endDate);
-      
-      if (!isWithinInterval(newDate, { start, end })) {
-        setError('Selected date must be within the itinerary dates');
-        return;
-      }
-      
-      setFormData(prev => ({
-        ...prev,
-        date: newDate
-      }));
-      setError('');
+    if (!newDate) return;
+
+    const start = new Date(dates.startDate);
+    const end = new Date(dates.endDate);
+
+    if (!isWithinInterval(newDate, { start, end })) {
+      setError('Selected date must be within the itinerary dates');
+      return;
     }
+
+    setFormData(prev => ({
+      ...prev,
+      date: newDate
+    }));
+    setError('');
+  };
+
+  const validateForm = () => {
+    if (!formData.type) {
+      setError('Please select an activity type');
+      return false;
+    }
+    if (!formData.title) {
+      setError('Please enter an activity title');
+      return false;
+    }
+    if (!formData.location.name || !formData.location.address) {
+      setError('Please select a valid location');
+      return false;
+    }
+    if (!formData.startTime || !formData.endTime) {
+      setError('Please set both start and end times');
+      return false;
+    }
+    if (formData.startTime >= formData.endTime) {
+      setError('End time must be after start time');
+      return false;
+    }
+    return true;
   };
 
   const handleSubmit = async () => {
+    if (!validateForm()) return;
+
     try {
-      setIsLoading(true);
-      setError('');
-
-      // Validate required fields
-      if (!formData.type || !formData.title || !formData.startTime || !formData.endTime) {
-        throw new Error('Please fill in all required fields');
-      }
-
-      // Validate location
-      if (!formData.location.name || !formData.location.coordinates[0] || !formData.location.coordinates[1]) {
-        throw new Error('Please select a valid location from the suggestions');
-      }
-
-      // Use the first date from the dates prop
-      const activityDate = dates?.startDate ? new Date(dates.startDate) : new Date();
-
-      // Format the activity data
-      const activityData = {
-        date: format(activityDate, 'yyyy-MM-dd'),
-        activity: {
-          type: formData.type.toLowerCase(),
-          title: formData.title.trim(),
-          description: formData.description?.trim() || '',
-          startTime: formData.startTime,
-          endTime: formData.endTime,
-          location: {
-            name: formData.location.name.trim(),
-            address: formData.location.address.trim(),
-            coordinates: formData.location.coordinates.map(coord => Number(coord) || 0),
-            placeId: formData.location.placeId || ''
-          },
-          cost: {
-            amount: Math.max(0, Number(formData.cost.amount) || 0),
-            currency: (formData.cost.currency || 'USD').toUpperCase()
-          },
-          notes: formData.notes?.trim() || ''
-        }
-      };
-
-      console.log('Sending activity data:', activityData);
-
-      // Add activity
       await addActivityMutation.mutateAsync({
         id: itineraryId,
-        data: activityData
+        data: {
+          date: formData.date,
+          activity: {
+            type: formData.type,
+            title: formData.title,
+            description: formData.description,
+            startTime: formData.startTime,
+            endTime: formData.endTime,
+            location: formData.location,
+            cost: {
+              amount: Number(formData.cost.amount),
+              currency: formData.cost.currency
+            },
+            notes: formData.notes
+          }
+        }
       });
 
       onClose();
     } catch (error) {
       console.error('Failed to add activity:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to add activity';
-      console.log('Error details:', error.response?.data);
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
+      setError(error.response?.data?.message || 'Failed to add activity');
     }
   };
 
@@ -201,84 +197,80 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
           </Alert>
         )}
 
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-          <FormControl fullWidth>
-            <InputLabel>Activity Type</InputLabel>
-            <Select
-              value={formData.type}
-              onChange={handleChange('type')}
-              label="Activity Type"
-              required
-            >
-              {activityTypes.map(type => (
-                <MenuItem key={type.value} value={type.value}>
-                  {type.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <LocalizationProvider dateAdapter={AdapterDateFns}>
-            <DatePicker
-              label="Activity Date"
-              value={formData.date}
-              onChange={handleDateChange}
-              minDate={dates?.startDate ? new Date(dates.startDate) : undefined}
-              maxDate={dates?.endDate ? new Date(dates.endDate) : undefined}
-              slotProps={{
-                textField: {
-                  fullWidth: true,
-                  required: true,
-                  error: !!error && error.includes('date')
-                }
-              }}
-            />
-          </LocalizationProvider>
-
-          <LoadScript
-            googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
-            libraries={libraries}
-          >
-            <StandaloneSearchBox
-              onLoad={onSearchBoxLoad}
-              onPlacesChanged={handlePlacesChanged}
-            >
-              <TextField
-                fullWidth
-                label="Search Location"
-                placeholder="Type to search for a place..."
-                required
+        <Grid container spacing={2} sx={{ mt: 1 }}>
+          <Grid item xs={12}>
+            <LocalizationProvider dateAdapter={AdapterDateFns}>
+              <DatePicker
+                label="Date"
+                value={formData.date}
+                onChange={handleDateChange}
+                minDate={new Date(dates.startDate)}
+                maxDate={new Date(dates.endDate)}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    required: true
+                  }
+                }}
               />
-            </StandaloneSearchBox>
-          </LoadScript>
+            </LocalizationProvider>
+          </Grid>
 
-          {formData.location.name && (
-            <Box sx={{ mt: 1 }}>
-              <Typography variant="subtitle2" gutterBottom>
-                Selected Location
-              </Typography>
-              <Typography variant="body2">
-                {formData.location.name}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {formData.location.address}
-              </Typography>
-            </Box>
-          )}
+          <Grid item xs={12}>
+            <FormControl fullWidth required>
+              <InputLabel>Activity Type</InputLabel>
+              <Select
+                value={formData.type}
+                onChange={handleChange('type')}
+                label="Activity Type"
+              >
+                {activityTypes.map(type => (
+                  <MenuItem key={type.value} value={type.value}>
+                    {type.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
 
-          <TextField
-            fullWidth
-            label="Title"
-            value={formData.title}
-            onChange={handleChange('title')}
-            required
-          />
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Title"
+              value={formData.title}
+              onChange={handleChange('title')}
+              required
+            />
+          </Grid>
 
-          <LocalizationProvider dateAdapter={AdapterDateFns}>
-            <Box sx={{ display: 'flex', gap: 2 }}>
+          <Grid item xs={12}>
+            <LoadScript
+              googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
+              libraries={['places']}
+            >
+              <StandaloneSearchBox
+                onLoad={onSearchBoxLoad}
+                onPlacesChanged={handlePlacesChanged}
+              >
+                <TextField
+                  fullWidth
+                  label="Location"
+                  placeholder="Search for a place..."
+                  required
+                  value={formData.location.name}
+                  InputProps={{
+                    readOnly: true
+                  }}
+                />
+              </StandaloneSearchBox>
+            </LoadScript>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <LocalizationProvider dateAdapter={AdapterDateFns}>
               <TimePicker
                 label="Start Time"
-                value={formData.startTime ? parse(formData.startTime, 'HH:mm', new Date()) : null}
+                value={formData.startTime ? new Date(`2000-01-01T${formData.startTime}`) : null}
                 onChange={handleTimeChange('startTime')}
                 slotProps={{
                   textField: {
@@ -287,9 +279,14 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
                   }
                 }}
               />
+            </LocalizationProvider>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <LocalizationProvider dateAdapter={AdapterDateFns}>
               <TimePicker
                 label="End Time"
-                value={formData.endTime ? parse(formData.endTime, 'HH:mm', new Date()) : null}
+                value={formData.endTime ? new Date(`2000-01-01T${formData.endTime}`) : null}
                 onChange={handleTimeChange('endTime')}
                 slotProps={{
                   textField: {
@@ -298,28 +295,39 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
                   }
                 }}
               />
-            </Box>
-          </LocalizationProvider>
+            </LocalizationProvider>
+          </Grid>
 
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Grid item xs={12} sm={6}>
             <TextField
-              type="number"
+              fullWidth
               label="Cost"
+              type="number"
               value={formData.cost.amount}
               onChange={(e) => setFormData(prev => ({
                 ...prev,
-                cost: { ...prev.cost, amount: Number(e.target.value) }
+                cost: {
+                  ...prev.cost,
+                  amount: Number(e.target.value)
+                }
               }))}
-              InputProps={{ inputProps: { min: 0 } }}
-              fullWidth
+              InputProps={{
+                inputProps: { min: 0 }
+              }}
             />
-            <FormControl sx={{ minWidth: 120 }}>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth>
               <InputLabel>Currency</InputLabel>
               <Select
                 value={formData.cost.currency}
                 onChange={(e) => setFormData(prev => ({
                   ...prev,
-                  cost: { ...prev.cost, currency: e.target.value }
+                  cost: {
+                    ...prev.cost,
+                    currency: e.target.value
+                  }
                 }))}
                 label="Currency"
               >
@@ -328,39 +336,44 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
                 <MenuItem value="GBP">GBP</MenuItem>
               </Select>
             </FormControl>
-          </Box>
+          </Grid>
 
-          <TextField
-            fullWidth
-            label="Description"
-            value={formData.description}
-            onChange={handleChange('description')}
-            multiline
-            rows={2}
-          />
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Description"
+              multiline
+              rows={2}
+              value={formData.description}
+              onChange={handleChange('description')}
+            />
+          </Grid>
 
-          <TextField
-            fullWidth
-            label="Notes"
-            value={formData.notes}
-            onChange={handleChange('notes')}
-            multiline
-            rows={2}
-          />
-        </Box>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Notes"
+              multiline
+              rows={2}
+              value={formData.notes}
+              onChange={handleChange('notes')}
+            />
+          </Grid>
+        </Grid>
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={onClose} disabled={isLoading}>
-          Cancel
-        </Button>
+        <Button onClick={onClose}>Cancel</Button>
         <Button
           onClick={handleSubmit}
           variant="contained"
-          disabled={isLoading}
-          startIcon={isLoading ? <CircularProgress size={20} /> : null}
+          disabled={addActivityMutation.isLoading}
         >
-          Add Activity
+          {addActivityMutation.isLoading ? (
+            <CircularProgress size={24} />
+          ) : (
+            'Add Activity'
+          )}
         </Button>
       </DialogActions>
     </Dialog>
