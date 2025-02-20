@@ -19,7 +19,7 @@ import { LoadScript, StandaloneSearchBox } from '@react-google-maps/api';
 import { TimePicker } from '@mui/x-date-pickers/TimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { format, parse } from 'date-fns';
+import { format, parse, startOfDay } from 'date-fns';
 import { useItinerary } from '../../hooks/useItinerary';
 
 const libraries = ['places'];
@@ -126,15 +126,39 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
         throw new Error('Please select a valid location from the suggestions');
       }
 
+      // Format the activity data
+      const activityData = {
+        dayIndex: 0, // This will be calculated on the server based on the date
+        activity: {
+          type: formData.type.toLowerCase(),
+          title: formData.title.trim(),
+          description: formData.description.trim(),
+          startTime: formData.startTime,
+          endTime: formData.endTime,
+          location: {
+            name: formData.location.name.trim(),
+            address: formData.location.address.trim(),
+            coordinates: formData.location.coordinates.map(coord => Number(coord)),
+            placeId: formData.location.placeId
+          },
+          cost: {
+            amount: Number(formData.cost.amount) || 0,
+            currency: formData.cost.currency.toUpperCase()
+          },
+          notes: formData.notes.trim()
+        }
+      };
+
+      // Add activity
       await addActivityMutation.mutateAsync({
         id: itineraryId,
-        data: formData
+        data: activityData
       });
 
       onClose();
     } catch (error) {
       console.error('Failed to add activity:', error);
-      setError(error.message || 'Failed to add activity');
+      setError(error.response?.data?.message || error.message || 'Failed to add activity');
     } finally {
       setIsLoading(false);
     }
