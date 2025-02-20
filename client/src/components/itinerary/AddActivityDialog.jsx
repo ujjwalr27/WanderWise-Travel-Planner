@@ -16,10 +16,10 @@ import {
   Typography
 } from '@mui/material';
 import { LoadScript, StandaloneSearchBox } from '@react-google-maps/api';
-import { TimePicker } from '@mui/x-date-pickers/TimePicker';
+import { TimePicker, DatePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { format, parse, startOfDay } from 'date-fns';
+import { format, parse, startOfDay, isWithinInterval } from 'date-fns';
 import { useItinerary } from '../../hooks/useItinerary';
 
 const libraries = ['places'];
@@ -37,6 +37,7 @@ const activityTypes = [
 
 const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
   const [formData, setFormData] = useState({
+    date: dates?.startDate ? new Date(dates.startDate) : new Date(),
     type: '',
     title: '',
     description: '',
@@ -111,6 +112,25 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
     }
   };
 
+  const handleDateChange = (newDate) => {
+    if (newDate) {
+      // Ensure date is within itinerary dates
+      const start = new Date(dates.startDate);
+      const end = new Date(dates.endDate);
+      
+      if (!isWithinInterval(newDate, { start, end })) {
+        setError('Selected date must be within the itinerary dates');
+        return;
+      }
+      
+      setFormData(prev => ({
+        ...prev,
+        date: newDate
+      }));
+      setError('');
+    }
+  };
+
   const handleSubmit = async () => {
     try {
       setIsLoading(true);
@@ -126,28 +146,33 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
         throw new Error('Please select a valid location from the suggestions');
       }
 
+      // Use the first date from the dates prop
+      const activityDate = dates?.startDate ? new Date(dates.startDate) : new Date();
+
       // Format the activity data
       const activityData = {
-        dayIndex: 0, // This will be calculated on the server based on the date
+        date: format(activityDate, 'yyyy-MM-dd'),
         activity: {
           type: formData.type.toLowerCase(),
           title: formData.title.trim(),
-          description: formData.description.trim(),
+          description: formData.description?.trim() || '',
           startTime: formData.startTime,
           endTime: formData.endTime,
           location: {
             name: formData.location.name.trim(),
             address: formData.location.address.trim(),
-            coordinates: formData.location.coordinates.map(coord => Number(coord)),
-            placeId: formData.location.placeId
+            coordinates: formData.location.coordinates.map(coord => Number(coord) || 0),
+            placeId: formData.location.placeId || ''
           },
           cost: {
-            amount: Number(formData.cost.amount) || 0,
-            currency: formData.cost.currency.toUpperCase()
+            amount: Math.max(0, Number(formData.cost.amount) || 0),
+            currency: (formData.cost.currency || 'USD').toUpperCase()
           },
-          notes: formData.notes.trim()
+          notes: formData.notes?.trim() || ''
         }
       };
+
+      console.log('Sending activity data:', activityData);
 
       // Add activity
       await addActivityMutation.mutateAsync({
@@ -158,7 +183,9 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
       onClose();
     } catch (error) {
       console.error('Failed to add activity:', error);
-      setError(error.response?.data?.message || error.message || 'Failed to add activity');
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to add activity';
+      console.log('Error details:', error.response?.data);
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -190,6 +217,23 @@ const AddActivityDialog = ({ open, onClose, itineraryId, dates }) => {
               ))}
             </Select>
           </FormControl>
+
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <DatePicker
+              label="Activity Date"
+              value={formData.date}
+              onChange={handleDateChange}
+              minDate={dates?.startDate ? new Date(dates.startDate) : undefined}
+              maxDate={dates?.endDate ? new Date(dates.endDate) : undefined}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  required: true,
+                  error: !!error && error.includes('date')
+                }
+              }}
+            />
+          </LocalizationProvider>
 
           <LoadScript
             googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
