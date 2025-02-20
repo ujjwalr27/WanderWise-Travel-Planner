@@ -36,7 +36,26 @@ const validateItineraryData = async (data) => {
       throw new Error('Invalid travel style');
     }
 
-    return { isValid: true, data };
+    // Clean and format the data
+    const cleanedData = {
+      ...data,
+      title: data.title?.trim() || `${data.destination.city} Trip`,
+      destination: {
+        city: String(data.destination.city).trim(),
+        country: String(data.destination.country).trim(),
+        coordinates: data.destination.coordinates.map(coord => Number(coord))
+      },
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      budget: {
+        planned: Number(data.budget.planned),
+        currency: String(data.budget.currency).toUpperCase()
+      },
+      travelStyle: String(data.travelStyle).toLowerCase(),
+      preferences: data.preferences || {}
+    };
+
+    return { isValid: true, data: cleanedData };
   } catch (error) {
     return {
       isValid: false,

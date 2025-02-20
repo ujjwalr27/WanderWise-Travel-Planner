@@ -16,9 +16,11 @@ const createItinerary = asyncHandler(async (req, res) => {
       });
     }
 
+    // Generate a default title if not provided
     const itineraryData = {
       ...validationResult.data,
-      user: req.user._id
+      user: req.user._id,
+      title: validationResult.data.title || `${validationResult.data.destination.city} Trip`
     };
 
     const itinerary = new Itinerary(itineraryData);
@@ -91,7 +93,13 @@ const updateItinerary = asyncHandler(async (req, res) => {
       });
     }
 
-    Object.assign(itinerary, validationResult.data);
+    // Ensure title is preserved or updated
+    const updates = {
+      ...validationResult.data,
+      title: validationResult.data.title || itinerary.title || `${validationResult.data.destination.city} Trip`
+    };
+
+    Object.assign(itinerary, updates);
     await itinerary.save();
 
     res.json({
