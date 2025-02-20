@@ -33,9 +33,11 @@ services:
   # Frontend static site
   - type: static
     name: wanderwise-client
-    buildCommand: cd client && npm install && npm run build
+    buildCommand: cd client && npm ci && NODE_ENV=production npm run build
     publishDir: client/dist
     envVars:
+      - key: NODE_ENV
+        value: production
       - key: VITE_API_URL
         value: https://wanderwise-api.onrender.com
       - key: VITE_SOCKET_URL
