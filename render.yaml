@@ -31,11 +31,10 @@ services:
         sync: false
 
   # Frontend static site
-  - type: web
+  - type: static
     name: wanderwise-client
-    env: static
     buildCommand: cd client && npm install && npm run build
-    staticPublishPath: ./client/dist
+    publishDir: client/dist
     envVars:
       - key: VITE_API_URL
         value: https://wanderwise-api.onrender.com
