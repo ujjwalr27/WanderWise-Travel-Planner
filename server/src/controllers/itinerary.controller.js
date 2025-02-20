@@ -16,6 +16,22 @@ const createItinerary = asyncHandler(async (req, res) => {
       });
     }
 
+    // Check for existing itinerary with same destination and dates
+    const existingItinerary = await Itinerary.findOne({
+      user: req.user._id,
+      'destination.city': validationResult.data.destination.city,
+      'destination.country': validationResult.data.destination.country,
+      startDate: validationResult.data.startDate,
+      endDate: validationResult.data.endDate
+    });
+
+    if (existingItinerary) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'An itinerary for this destination and dates already exists'
+      });
+    }
+
     // Generate a default title if not provided
     const itineraryData = {
       ...validationResult.data,
@@ -25,6 +41,15 @@ const createItinerary = asyncHandler(async (req, res) => {
 
     const itinerary = new Itinerary(itineraryData);
     await itinerary.save();
+
+    // Add to user's saved itineraries
+    if (!req.user.savedItineraries) {
+      req.user.savedItineraries = [];
+    }
+    if (!req.user.savedItineraries.includes(itinerary._id)) {
+      req.user.savedItineraries.push(itinerary._id);
+      await req.user.save();
+    }
 
     res.status(201).json({
       status: 'success',
@@ -127,6 +152,14 @@ const deleteItinerary = asyncHandler(async (req, res) => {
       status: 'error',
       message: 'Itinerary not found'
     });
+  }
+
+  // Remove from user's saved itineraries
+  if (req.user.savedItineraries) {
+    req.user.savedItineraries = req.user.savedItineraries.filter(
+      id => id.toString() !== itinerary._id.toString()
+    );
+    await req.user.save();
   }
 
   res.json({
