@@ -1,50 +1,51 @@
 services:
-  # Backend API service
   - type: web
-    name: wanderwise-api
+    name: ai-travel-agent-backend
     env: node
-    region: singapore
+    region: oregon
+    plan: starter
     buildCommand: cd server && npm install
     startCommand: cd server && npm start
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 5000
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET
         sync: false
-      - key: GEMINI_API_KEY
+      - key: OPENAI_API_KEY
         sync: false
-      - key: GOOGLE_MAPS_API_KEY
-        sync: false
-      - key: REDIS_URL
-        sync: false
-      - key: EMAIL_USER
-        sync: false
-      - key: EMAIL_PASSWORD
+      - key: GOOGLE_AI_API_KEY
         sync: false
       - key: AMADEUS_CLIENT_ID
         sync: false
       - key: AMADEUS_CLIENT_SECRET
         sync: false
-
-  # Frontend static site
-  - type: static
-    name: wanderwise-client
-    rootDir: client
-    buildCommand: npm ci && NODE_ENV=production npm run build
-    publishDir: dist
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: VITE_API_URL
-        value: https://wanderwise-api.onrender.com
-      - key: VITE_SOCKET_URL
-        value: https://wanderwise-api.onrender.com
-      - key: VITE_GOOGLE_MAPS_API_KEY
+      - key: REDIS_URL
         sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+  - type: static
+    name: ai-travel-agent-frontend
+    env: static
+    buildCommand: cd client && npm install && npm run build
+    staticPublishPath: client/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://ai-travel-agent-backend.onrender.com
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
     routes:
       - type: rewrite
         source: /*

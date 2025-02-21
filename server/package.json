@@ -3,9 +3,6 @@
   "version": "1.0.0",
   "description": "AI-powered travel agent application backend",
   "main": "src/index.js",
-  "engines": {
-    "node": ">=18.0.0"
-  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
