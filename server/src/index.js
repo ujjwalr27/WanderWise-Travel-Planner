@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const chatController = require('./controllers/chat.controller');
@@ -56,29 +57,31 @@ app.use('/api/flights', flightRoutes);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
-  const clientPath = path.join(__dirname, '../../client/dist');
-  console.log('Serving static files from:', clientPath);
+  // Try multiple possible paths for client build files
+  const clientBuildPath = path.resolve(__dirname, '../../client/dist');
+  const alternatePath = path.resolve('/opt/render/project/src/client/dist');
   
-  // Check if the client build directory exists
-  const fs = require('fs');
-  if (!fs.existsSync(clientPath)) {
-    console.error('ERROR: Client build directory does not exist:', clientPath);
-    console.error('Make sure to build the client application before deploying');
+  console.log('Checking for client build at:', clientBuildPath);
+  console.log('Checking alternate path:', alternatePath);
+  
+  if (fs.existsSync(clientBuildPath)) {
+    console.log('Using client build path:', clientBuildPath);
+    app.use(express.static(clientBuildPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(clientBuildPath, 'index.html'));
+    });
+  } else if (fs.existsSync(alternatePath)) {
+    console.log('Using alternate client build path:', alternatePath);
+    app.use(express.static(alternatePath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(alternatePath, 'index.html'));
+    });
+  } else {
+    console.error('ERROR: Client build not found at expected locations');
+    app.get('*', (req, res) => {
+      res.status(500).send('Server configuration error: Client build not found');
+    });
   }
-  
-  app.use(express.static(clientPath));
-  
-  app.get('*', (req, res) => {
-    const indexPath = path.join(clientPath, 'index.html');
-    
-    // Check if index.html exists
-    if (!fs.existsSync(indexPath)) {
-      console.error('ERROR: index.html does not exist at:', indexPath);
-      return res.status(500).send('Server configuration error: index.html not found');
-    }
-    
-    res.sendFile(indexPath);
-  });
 } else {
   // Basic route for development
   app.get('/', (req, res) => {

@@ -7,8 +7,6 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "test": "jest",
-    "build": "cd ../client && npm install && npm run build",
-    "start:prod": "npm run build && NODE_ENV=production node src/index.js",
     "update-ai": "npm install @google/generative-ai@latest"
   },
   "dependencies": {
