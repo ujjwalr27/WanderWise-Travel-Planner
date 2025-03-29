@@ -1,5 +1,8 @@
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> ef664ead777fb5d34fb65f4d82c72d1f16285077
 import {
   Box,
   Typography,

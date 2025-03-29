@@ -1,4 +1,5 @@
-import { format, differenceInDays, addDays, parseISO, isBefore, startOfDay } from 'date-fns';
+
+import { format, differenceInDays, addDays, parseISO } from 'date-fns';
 
 export const formatDate = (date) => {
   if (!date) return '';
@@ -70,21 +71,16 @@ export const generateDateRange = (startDate, endDate) => {
 };
 
 export const isValidDateRange = (startDate, endDate) => {
-  if (!startDate || !endDate) {
+
+  if (!startDate || !endDate) return false;
+  try {
+    const start = typeof startDate === 'string' ? parseISO(startDate) : startDate;
+    const end = typeof endDate === 'string' ? parseISO(endDate) : endDate;
+    return end >= start;
+  } catch (error) {
+    console.error('Error validating date range:', error);
     return false;
   }
-
-  // Normalize dates to start of day for consistent comparison
-  const normalizedStartDate = startOfDay(new Date(startDate));
-  const normalizedEndDate = startOfDay(new Date(endDate));
-
-  // Check if end date is before start date
-  if (isBefore(normalizedEndDate, normalizedStartDate)) {
-    return false;
-  }
-  
-  // This is valid as long as end date is not before start date
-  return true;
 };
 
 export const parseTimeString = (timeString) => {
