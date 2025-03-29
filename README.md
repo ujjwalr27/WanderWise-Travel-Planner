@@ -184,4 +184,58 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [Material-UI](https://mui.com/) for the UI components
 - [Amadeus](https://developers.amadeus.com/) for flight data
 - [Google Maps Platform](https://developers.google.com/maps) for mapping
-- [Google Gemini AI](https://ai.google.dev/) for AI features 
+- [Google Gemini AI](https://ai.google.dev/) for AI features
+
+## Deployment Instructions
+
+### Local Development
+
+1. Install dependencies:
+   ```
+   npm run install:all
+   ```
+
+2. Start development servers:
+   ```
+   npm run dev
+   ```
+
+### Production Deployment
+
+1. Build the application:
+   ```
+   npm run build:prod
+   ```
+
+2. Start the production server:
+   ```
+   npm run start:prod
+   ```
+
+## Environment Variables
+
+Required environment variables to be set:
+
+### Server
+- `MONGODB_URI`: MongoDB connection string
+- `JWT_SECRET`: Secret key for JWT token generation
+- `GEMINI_API_KEY`: Google Gemini API key
+- `REDIS_URL`: Redis connection string
+- `NODE_ENV`: Set to 'production' for production mode
+
+## Troubleshooting
+
+### Static Files Not Found
+If you encounter the error `ENOENT: no such file or directory, stat '/path/to/client/dist/index.html'`:
+
+1. Make sure you've built the client application:
+   ```
+   npm run build:client
+   ```
+
+2. Check if the `client/dist` directory exists and contains the built files.
+
+3. Start the server in production mode:
+   ```
+   npm run start:prod
+   ``` 

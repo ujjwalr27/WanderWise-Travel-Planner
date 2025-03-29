@@ -56,10 +56,28 @@ app.use('/api/flights', flightRoutes);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../client/dist')));
+  const clientPath = path.join(__dirname, '../../client/dist');
+  console.log('Serving static files from:', clientPath);
+  
+  // Check if the client build directory exists
+  const fs = require('fs');
+  if (!fs.existsSync(clientPath)) {
+    console.error('ERROR: Client build directory does not exist:', clientPath);
+    console.error('Make sure to build the client application before deploying');
+  }
+  
+  app.use(express.static(clientPath));
   
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
+    const indexPath = path.join(clientPath, 'index.html');
+    
+    // Check if index.html exists
+    if (!fs.existsSync(indexPath)) {
+      console.error('ERROR: index.html does not exist at:', indexPath);
+      return res.status(500).send('Server configuration error: index.html not found');
+    }
+    
+    res.sendFile(indexPath);
   });
 } else {
   // Basic route for development
