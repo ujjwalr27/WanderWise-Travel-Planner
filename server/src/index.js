@@ -6,7 +6,6 @@ const mongoose = require('mongoose');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
-const fs = require('fs');
 require('dotenv').config();
 
 const chatController = require('./controllers/chat.controller');
@@ -16,14 +15,14 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: ['https://wanderwise-client.onrender.com', 'http://localhost:3000'],
     methods: ['GET', 'POST']
   }
 });
 
 // Middleware
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: ['https://wanderwise-client.onrender.com', 'http://localhost:3000'],
   credentials: true
 }));
 app.use(helmet());
@@ -57,31 +56,11 @@ app.use('/api/flights', flightRoutes);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
-  // Try multiple possible paths for client build files
-  const clientBuildPath = path.resolve(__dirname, '../../client/dist');
-  const alternatePath = path.resolve('/opt/render/project/src/client/dist');
+  app.use(express.static(path.join(__dirname, '../../client/dist')));
   
-  console.log('Checking for client build at:', clientBuildPath);
-  console.log('Checking alternate path:', alternatePath);
-  
-  if (fs.existsSync(clientBuildPath)) {
-    console.log('Using client build path:', clientBuildPath);
-    app.use(express.static(clientBuildPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(clientBuildPath, 'index.html'));
-    });
-  } else if (fs.existsSync(alternatePath)) {
-    console.log('Using alternate client build path:', alternatePath);
-    app.use(express.static(alternatePath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(alternatePath, 'index.html'));
-    });
-  } else {
-    console.error('ERROR: Client build not found at expected locations');
-    app.get('*', (req, res) => {
-      res.status(500).send('Server configuration error: Client build not found');
-    });
-  }
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
+  });
 } else {
   // Basic route for development
   app.get('/', (req, res) => {
