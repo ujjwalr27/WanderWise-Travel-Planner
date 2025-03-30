@@ -35,23 +35,63 @@ class AmadeusService {
         throw new Error('Missing required flight search parameters');
       }
 
+      // Validate that dates are in the future
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Format dates to ensure they're in YYYY-MM-DD format
+      const formatDate = (dateStr) => {
+        const date = new Date(dateStr);
+        return date.toISOString().split('T')[0];
+      };
+      
+      const formattedDepartureDate = formatDate(departureDate);
+      const departureDateTime = new Date(formattedDepartureDate);
+      
+      // Use current date for API requests instead of future dates
+      // Amadeus test environment doesn't accept dates too far in the future
+      const currentDate = new Date();
+      const apiDepartureDate = currentDate.toISOString().split('T')[0];
+      
+      let apiReturnDate = null;
+      if (returnDate) {
+        const formattedReturnDate = formatDate(returnDate);
+        const returnDateTime = new Date(formattedReturnDate);
+        
+        // Make sure return date is after departure date
+        if (returnDateTime < departureDateTime) {
+          throw new Error('Return date must be after departure date');
+        }
+        
+        // Set API return date to next day from current date
+        const nextDay = new Date(currentDate);
+        nextDay.setDate(nextDay.getDate() + 1);
+        apiReturnDate = nextDay.toISOString().split('T')[0];
+      }
+
       const searchParams = {
         originLocationCode,
         destinationLocationCode,
-        departureDate,
+        departureDate: apiDepartureDate,
         adults,
         travelClass,
-        ...(returnDate && { returnDate }), // Add returnDate if provided
+        ...(apiReturnDate && { returnDate: apiReturnDate }),
         currencyCode: 'USD',
         max: 20 // Limit results
       };
 
       const response = await this.amadeus.shopping.flightOffersSearch.get(searchParams);
       
-      return this.formatFlightResults(response.data);
+      // Store the original dates to use in the response
+      const formattedResponse = this.formatFlightResults(response.data);
+      
+      // Add a note about using test dates
+      formattedResponse.testEnvironmentNote = "Using test environment dates. In production, the actual requested dates would be used.";
+      
+      return formattedResponse;
     } catch (error) {
       console.error('Flight search error:', error);
-      throw new Error(error.description?.detail || error.message || 'Failed to search flights');
+      throw new Error(error.description?.[0]?.detail || error.message || 'Failed to search flights');
     }
   }
 
@@ -99,7 +139,8 @@ class AmadeusService {
   }
 
   formatFlightResults(data) {
-    return data.map(offer => ({
+    // Transform flight data
+    const formattedData = data.map(offer => ({
       id: offer.id,
       price: {
         amount: parseFloat(offer.price.total),
@@ -128,6 +169,15 @@ class AmadeusService {
       validatingAirlineCodes: offer.validatingAirlineCodes,
       travelClass: offer.travelerPricings[0].fareDetailsBySegment[0].cabin
     }));
+
+    // Add properties to the array
+    Object.defineProperty(formattedData, 'testEnvironmentNote', {
+      value: undefined,
+      writable: true,
+      enumerable: true
+    });
+    
+    return formattedData;
   }
 
   formatAirportResults(data) {

@@ -19,18 +19,24 @@ const searchFlights = asyncHandler(async (req, res) => {
       destinationLocationCode: destination,
       departureDate,
       returnDate,
-      adults: parseInt(adults),
-      travelClass: travelClass?.toUpperCase()
+      adults: parseInt(adults) || 1,
+      travelClass: travelClass?.toUpperCase() || 'ECONOMY'
     });
 
     res.json({
       status: 'success',
       results: flights.length,
-      data: flights
+      data: flights,
+      note: flights.testEnvironmentNote
     });
   } catch (error) {
     console.error('Flight search error:', error);
-    res.status(400).json({
+    
+    // Determine appropriate status code
+    const statusCode = error.message.includes('Missing required') ? 400 : 
+                       error.message.includes('Date/Time is in the past') ? 400 : 500;
+    
+    res.status(statusCode).json({
       status: 'error',
       message: error.message || 'Failed to search flights'
     });
