@@ -1,5 +1,5 @@
 # WanderWise - AI-Powered Travel Planning Platform
-
+# my  project by ujjwal
 WanderWise is a modern, AI-powered travel planning platform that helps users create personalized itineraries, search flights, and manage their travel plans with ease.
 
 ![WanderWise Logo](./client/public/wanderwise-icon.png)
